@@ -1,0 +1,6 @@
+pandas
+numpy
+tensorflow
+rouge_score
+datasets
+wandb

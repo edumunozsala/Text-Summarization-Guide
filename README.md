@@ -1,73 +1,50 @@
 ﻿
-# Capstone Project about Text Summarization using Machine Learning techniques
+# A Guide on Text Summarization using NLP techniques
 
-This repository contains all the documents and code developed for the capstone project in the Machine Learning Engineer Nanodegree program.
+During the execution of my capstone project in the **Machine Learning Engineer Nanodegree in Udacity**, I studied in some depth about the problem of text summarization. For that reason, I am going to write a series of articles about it, from the definition of the problem and some approaches to solve it, showing some basic implementations and algorithms and describing and testing some more advanced techniques. It will take me some posts for the next few weeks or months. 
 
-The project is about text summarization applying machine learning techniques:
+I will also take advantage of powerful tools like **Amazon SageMaker** containers, **hyperparameter tuning**, **transformers** and **Weights & Biases** logging to show you how to use them to improve and evaluate the performance of the models.
 
-*Text Summarization is a challenging problem these days and it can be defined as a technique of shortening a long piece of text to create a coherent and fluent short summary having only the main points in the document*
+As a summary, some of the future posts will introduce:
+- Exploratory Data Analysis for text, to dive deeper in the features of the text and its distribution of words.
+- Extractive solutions: Using a simple function from a popular library, gensim, and a Sentence clustering algorithm.
+- Abstractive summarization using LSTMs and the attention mechanism
+- The Pointer Generation network, an extension from an encoder-decoder, a mix between extractive and abstractive algorithms.
+- The Transformer model, extending the attention concept to an initial solution.
+- Advanced transformer models like T5 or BART from the fantastic library, transformers by Huggingface.
+- Etc,…
 
-## Proposal
-The capstone proposal is written in the file name **proposal.pdf** following the rubric defined in the nanodegree program. It contains the sections:
-- Domain background
-- Problem description and statement
-- Dataset and inputs
-- Solution Statement
-- Benchmark Model
-- Evaluation Metric
-- Project Design
--  Links
+## Overview
+With the rise of information technologies, globalization and Internet, an enormous amount of information is created daily, including a large volume of written texts. The International Data Corporation (IDC) projects that the total amount of digital data circulating annually around the world would sprout "from 4.4 zettabytes in 2013 to hit 180 zettabytes in 2025" [1]. Dealing with such a huge amount of data is a current problem where automatization techniques can help many industries and businesses.
 
-The same content is included in the proposal.md file but with not formatted text.
+For example, hundreds or thousands of news are published around the world in a few hours and people do not want to read a full article for ten minutes, So, the development of automatic techniques to get short, concise and understandable summaries would be of great help to many global companies and organizations.
 
-## Project Report
-The main document where we introduce the problem definition, the solution and evaluation of the results is the project report named as **project_report.pdf**. It has been written following a well-organized structure similar to that one described on the [template provided](https://github.com/udacity/machine-learning/blob/master/projects/capstone/capstone_report_template.md).
+Another use case is social media monitoring, many companies or organizations need to be notified when tweets about their products or brand are mentioned to prepare an appropriate and quick response to them. Other fields of interest are legal contract analysis, question answering and bots, etc.
 
-You can find a detailed description on the models and all the topics of interest in this report, we will not discuss its content in the sections of this README file.
+## Problem Statement
+Text Summarization is a challenging problem these days and it can be defined as a technique of shortening a long piece of text to create a coherent and fluent short summary having only the main points in the document.
+
+But, *what is a summary?* It is a *"text that is produced from one or more texts, that contains a significant portion of the information in the original text(s), and that is no longer than half of the original text(s)* [3]. *Summarization clearly involves both these still poorly understood processes, and adds a third (condensation, abstraction, generalization)"*. Or as it is described in [4], text summarization is *"the process of distilling the most important information from a source (or sources) to produce an abridged version for a particular user (or user)and task (or tasks)."*
+
+At this moment, it is a very active field of research and the state-of-the-art solutions are still not so successful than we could expect.
+
+Our main goal in this project is to analyze and build a text summarizer using some basics techniques based on machine learning algorithms. Given a long and descriptive text about some topic we will create a brief and understandable summary covering that same topic. As with any other supervised techniques, we will use a dataset containing pairs of texts and summaries.
 
 ## Dataset
-The project is intended to use a **Kaggle dataset called News Summary**, [click this link to access it](https://www.kaggle.com/sunnysai12345/news-summary). The datafiles are also included in the **data** directory in this repository.
+When searching for information and data about text summarization I found hard to obtain a "good" dataset. Some of the most popular data sets are intended for research use, containing hundreds of thousands of examples and gigabytes of data that require high computational capacity and days or weeks to train. But we are interested in a dataset that could be trained faster, in a few hours, where we can experiment and develop easily
 
-The dataset consists in 4515 examples of news and their summaries and some extra data like Author_name, Headlines, Url of Article, Short text, Complete Article. This data was extracted from Inshorts, scraping the news article from Hindu, Indian times and Guardian.
-An example:
-• Text: "Isha Ghosh, an 81-year-old member of Bharat Scouts and Guides (BSG), has been imparting physical and mental training to schoolchildren ..."
-• Summary: "81-yr-old woman conducts physical training in J'khand schools" 
+For that reason, we will use a dataset from Kaggle, called Inshorts News Data. Inshorts is a news service that provides short summaries of news from around the web, scraping the news article from Hindu, Indian times and Guardian. This dataset contains headlines and summary of news items, about 55,000, along with its source.
 
-This dataset also include a version with shorter news and summaries, about 98,000 news. They will provide us training and validation data for our abstractive model.
-
-You can download our cleaned dataset in a Kaggle public dataset called [Cleaned News Summary](https://www.kaggle.com/edumunozsala/cleaned-news-summary).
-You can also download the Glove embeddings from Kaggle in the folowing dataset [GloVe: Global Vectors for Word Representation](https://www.kaggle.com/rtatman/glove-global-vectors-for-word-representation), glove.6B.100d.txt.
-
+**Kaggle dataset called Inshorts News Data**, [click this link to access it](https://www.kaggle.com/shashichander009/inshorts-news-data). The datafiles are also included in the **data** directory in this repository.
 
 ## Exploratory Data Analysis and preprocess data
+**WORK IN PROGRESS**
 
-The folder **data_analysis** contains a Jupyter notebook with an EDA on the dataset where we can observe the word and sentence distributions and some other interesting insights. 
+The Jupyter notebook, **Text_summarization_EDA** describes an EDA on the dataset where we can observe the word and sentence distributions and some other interesting insights. 
 
-It also contains a notebook where we apply some cleaning techniques on text data (dealing with punctuation, stop words,...) and split the data in a train and validation dataset.
+It also contains a notebook where we apply some cleaning techniques on text data (dealing with punctuation, stop words,...) and split the data in a train and validation dataset.*Still in progress*
 
-## The benchmark model: Gensim Summarizer
-
-This algorithm is included in the folder **gensim_summarizer** of this repository.
-
-*The Gensim summarization module implements TextRank, an unsupervised algorithm based on weighted-graphs from a paper by Mihalcea et al. It is built on top of the popular PageRank algorithm that Google used for ranking.*
-
-In that folder you can find a README which describes the content and how to use it.
-
-## Sentence Embeddings
-
-Our extractive model is based on clustering the sentence embeddings in our source document. The method is described in the report and it is easy to understand and apply.
-
-This model is included in the folder **clustering_summarizer** and a README file will help you to understand it.
-
-## A Sequence-2-Sequence model 
-Our first attempt to deal with the summarization problem consists of a sequence-2-sequence model. It is an Encoder-Decoder with attention mechanism that when we analyze the results we could not consider a correct solution. So finally *we discarded this model*
-
-This model is included in the folder **seq2seq_text_summarizer**.
-
-## Pointer Generator Network
-In the folder **pointer_generator** you can find an implementation of a encoder-decoder architecture using the pointer generator technique. 
-
-In the README file of that folder we describe the notebook and how to use it. 
+## NEW features in progress
 
 ## License
 This repository is under the GNU General Public License v3.0.

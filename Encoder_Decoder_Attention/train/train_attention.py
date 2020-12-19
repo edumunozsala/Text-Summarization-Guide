@@ -88,7 +88,7 @@ def train_step(inputs):
     # Teacher forcing - feeding the target as the next input
     for t in range(1, targ.shape[1]):
       # passing enc_output to the decoder
-      predictions, dec_hidden = decoder((dec_input, enc_output, dec_hidden))
+      predictions, dec_hidden, _ = decoder((dec_input, enc_output, dec_hidden))
       loss += loss_function(targ[:, t], predictions)
 
       # using teacher forcing
@@ -122,7 +122,7 @@ def eval_step(inputs):
       # passing enc_output to the decoder
       #decoder(dec_input, enc_output, dec_hidden)
       #predictions, dec_hidden = decoder(dec_input, enc_output, dec_hidden)
-      predictions, dec_hidden  = decoder((dec_input, enc_output, dec_hidden), False)
+      predictions, dec_hidden,_ = decoder((dec_input, enc_output, dec_hidden), False)
       loss += loss_function(targ[:, t], predictions)
       # using teacher forcing
       dec_input = tf.expand_dims(targ[:, t], 1)
@@ -339,7 +339,7 @@ if __name__ == '__main__':
     tf.keras.backend.clear_session()
     # Create the Transformer model
     encoder = Encoder(input_vocab_size, args.embedding_dim, args.lstm_units, args.batch_size, args.dropout_rate, None)
-    decoder = Decoder(output_vocab_size, args.embedding_dim, args.lstm_units, args.batch_size, args.dropout_rate, None)
+    decoder = DecoderBahdanauAtt(output_vocab_size, args.embedding_dim, args.lstm_units, args.batch_size, args.dropout_rate, None)
 
     # Define a categorical cross entropy loss
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True,

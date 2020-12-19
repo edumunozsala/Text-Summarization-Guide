@@ -3,7 +3,7 @@ FROM tensorflow/tensorflow:latest-gpu-py3
 
 MAINTAINER edumunozsala "edumunozsala@gmail.com"
 
-LABEL project="transformer-mnt-custom"
+LABEL project="ts-enc-dec-attention"
 
 # Do not change this argument
 ARG APP_HOME=/opt/program

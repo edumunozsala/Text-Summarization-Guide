@@ -84,14 +84,12 @@ def convert(tokenizer, tensor):
       print ("%d ----> %s" % (t, tokenizer.index_word[t]))
 
 def tensor_to_text(tokenizer, tensors):
-  #text=[''.join(tokenizer.index_word[t]) if t!=0
   texts=[]
-  tensors = tensors.astype(int)
   for tensor in tensors:
       text=[tokenizer.index_word[t] for t in tensor if t!=0]
       texts.append(' '.join(text))
 
   return texts
-
+  
 def parse_score(result):
     return {k: round(v.mid.fmeasure * 100, 4) for k, v in result.items()}

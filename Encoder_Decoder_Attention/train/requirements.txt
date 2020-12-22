@@ -1,7 +1,4 @@
-pandas
-numpy
-sklearn
-tensorflow
-rouge_score
 datasets
+pandas
+sklearn
 wandb

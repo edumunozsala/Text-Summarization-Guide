@@ -7,7 +7,6 @@ import os
 import gc
 import time
 import pandas as pd
-import numpy as np
 import pickle
 import re
 import random
@@ -27,12 +26,12 @@ def install(package):
 #install('rouge_score')
 #install('wandb')
 
-import datasets
-import wandb
+#import datasets
+#import wandb
 
 from utils import word_tokenize, tensor_to_text, parse_score
 
-from enc_dec_att_model import Encoder, Decoder, BahdanauAttention
+from enc_dec_att_model import Encoder, Decoder
 
 def get_train_data(training_dir, train_file, nsamples):
 
@@ -197,15 +196,19 @@ def main_train(dataset, val_dataset, n_epochs, steps_per_epoch, val_steps_per_ep
         predictions = tensor_to_text(tokenizer_outputs, preds.numpy())
         #references = tokenizer_outputs.sequences_to_texts(targ)
         references = tensor_to_text(tokenizer_outputs, targ.numpy())
-        metric.add_batch(predictions=predictions, references=references)
+        if logging:
+            metric.add_batch(predictions=predictions, references=references)
 
     epoch_loss = total_loss / val_steps_per_epoch
     val_losses.append(epoch_loss)
-    # compute the metric
-    metric_results = metric.compute()
-    metric_score = parse_score(metric_results)
-    # Save the validation metric
-    val_metric.append(metric_score['rouge1'])
+
+    if logging:
+        # compute the metric
+        metric_results = metric.compute()
+        metric_score = parse_score(metric_results)
+        # Save the validation metric
+        val_metric.append(metric_score['rouge1'])
+
     # Register in wandb
     if logging:
         wandb.log({"Validation Loss": val_loss.result(), #})
@@ -213,10 +216,15 @@ def main_train(dataset, val_dataset, n_epochs, steps_per_epoch, val_steps_per_ep
                    "Rouge2": metric_score['rouge2'],
                    "RougeL": metric_score['rougeL']})
 
-    #Show Validation results
-    print("\nValidation: Epoch {} Batch {} Loss {:.4f} Rouge1 {:.4f} Rouge2 {:.4f} RougeL {:.4f}".format(
+    if logging:
+        #Show Validation results
+        print("\nValidation: Epoch {} Batch {} Loss {:.4f} Rouge1 {:.4f} Rouge2 {:.4f} RougeL {:.4f}".format(
                 epoch+1, batch, epoch_loss,metric_score['rouge1'], metric_score['rouge2'],
                 metric_score['rougeL']))
+    else:
+        print("\nValidation: Epoch {} Batch {} Loss {:.4f} ".format(
+                epoch+1, batch, epoch_loss))
+    
 
     # Checkpoint the model on every epoch    
     if ((epoch + 1) % 2 == 0) and save_checkpoints:    
@@ -298,22 +306,23 @@ if __name__ == '__main__':
     project_name="Text-summa-EncDec-Attention"
     demo_name="Demo_run"
 
-    # Set the project name, the run name, the description
-    wandb.init(project=project_name, name=demo_name, 
-                notes="Training en encoder-decoder with attention for Text Summarization")
-    # WandB – Config is a variable that holds and saves hyperparameters and inputs
-    # Defining some key variables that will be used later on in the training  
-    config = wandb.config          # Initialize config
-    config.BATCH_SIZE = args.batch_size    # input batch size for training (default: 64)
-    config.EPOCHS = args.epochs        # number of epochs to train (default: 10)
-    config.SEED = args.seed               # random seed (default: 42)
-    config.MAX_VOCAB_SIZE = args.vocab_size
-    config.MAX_SUMM_LENGTH = args.summ_max_len 
-    config.MAX_TEXT_LENGTH = args.text_max_len
-    config.NUM_SAMPLES = args.nsamples
-    config.RNN_UNITS = args.lstm_units
-    config.EMBEDDING_DIM = args.embedding_dim
-    config.LEARNING_RATE = args.learning_rate
+    if args.resume:
+        # Set the project name, the run name, the description
+        wandb.init(project=project_name, name=demo_name, 
+                    notes="Training en encoder-decoder with attention for Text Summarization")
+        # WandB – Config is a variable that holds and saves hyperparameters and inputs
+        # Defining some key variables that will be used later on in the training  
+        config = wandb.config          # Initialize config
+        config.BATCH_SIZE = args.batch_size    # input batch size for training (default: 64)
+        config.EPOCHS = args.epochs        # number of epochs to train (default: 10)
+        config.SEED = args.seed               # random seed (default: 42)
+        config.MAX_VOCAB_SIZE = args.vocab_size
+        config.MAX_SUMM_LENGTH = args.summ_max_len 
+        config.MAX_TEXT_LENGTH = args.text_max_len
+        config.NUM_SAMPLES = args.nsamples
+        config.RNN_UNITS = args.lstm_units
+        config.EMBEDDING_DIM = args.embedding_dim
+        config.LEARNING_RATE = args.learning_rate
 
     # Load the training data.
     print("Get the train data")
@@ -332,8 +341,9 @@ if __name__ == '__main__':
     dataset, val_dataset, steps_per_epoch, val_steps_per_epoch = get_datasets(encoder_inputs, decoder_outputs, args.train_frac, 
                                                                     args.batch_size, args.seed)
 
-    # Create the metric
-    metric = datasets.load_metric('rouge')
+    if args.resume:
+        # Create the metric
+        metric = datasets.load_metric('rouge')
     
     # Clean the session
     tf.keras.backend.clear_session()
@@ -377,8 +387,10 @@ if __name__ == '__main__':
     # Train the model
     train_losses, val_losses, val_metric = main_train(dataset, val_dataset, args.epochs, steps_per_epoch, 
                                                   val_steps_per_epoch, save_checkpoints=False, logging= False)
-    # Finish the wandb job
-    wandb.finish()
+    if args.resume:
+        # Finish the wandb job
+        wandb.finish()
+
     # Save the encoder
     encoder_model_path = os.path.join(args.sm_model_dir, 'encoder')
     tf.saved_model.save(encoder, encoder_model_path)

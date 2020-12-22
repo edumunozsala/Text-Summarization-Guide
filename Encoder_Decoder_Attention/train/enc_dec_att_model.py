@@ -1,4 +1,3 @@
-import numpy as np
 import tensorflow as tf
 
 
@@ -117,7 +116,7 @@ class DecoderBahdanauAtt(tf.keras.Model):
     
 
   #def call(self, x, enc_output, hidden, Training=True):
-  def call(self, inputs, Training=True):
+  def call(self, inputs, training=True):
     # x shape after passing through embedding == (batch_size, 1, embedding_dim)
     x, enc_output, hidden = inputs
 
@@ -178,7 +177,7 @@ class Decoder(tf.keras.Model):
     
 
   #def call(self, x, enc_output, hidden, Training=True):
-  def call(self, inputs, Training=True):
+  def call(self, inputs, training=True):
     # x shape after passing through embedding == (batch_size, 1, embedding_dim)
     x, enc_output, hidden = inputs
 

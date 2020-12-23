@@ -26,8 +26,8 @@ def install(package):
 #install('rouge_score')
 #install('wandb')
 
-#import datasets
-#import wandb
+import datasets
+import wandb
 
 from utils import word_tokenize, tensor_to_text, parse_score
 
@@ -87,7 +87,7 @@ def train_step(inputs):
     # Teacher forcing - feeding the target as the next input
     for t in range(1, targ.shape[1]):
       # passing enc_output to the decoder
-      predictions, dec_hidden = decoder((dec_input, enc_output, dec_hidden))
+      predictions, dec_hidden = decoder((dec_input, dec_hidden))
       loss += loss_function(targ[:, t], predictions)
 
       # using teacher forcing
@@ -121,7 +121,7 @@ def eval_step(inputs):
       # passing enc_output to the decoder
       #decoder(dec_input, enc_output, dec_hidden)
       #predictions, dec_hidden = decoder(dec_input, enc_output, dec_hidden)
-      predictions, dec_hidden  = decoder((dec_input, enc_output, dec_hidden), False)
+      predictions, dec_hidden  = decoder((dec_input, dec_hidden), False)
       loss += loss_function(targ[:, t], predictions)
       # using teacher forcing
       dec_input = tf.expand_dims(targ[:, t], 1)

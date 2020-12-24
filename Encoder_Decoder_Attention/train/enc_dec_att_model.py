@@ -3,10 +3,11 @@ import tensorflow as tf
 
 # Create the Encoder based on Bidirectional LSTMs
 class Encoder(tf.keras.Model):
-    def __init__(self, vocab_size, embedding_dim, enc_units, batch_sz, dropout_rate, embedding_matrix):
+    def __init__(self, vocab_size, n_layers, embedding_dim, enc_units, batch_sz, dropout_rate, embedding_matrix):
         super(Encoder, self).__init__()
         self.batch_sz = batch_sz
         self.enc_units = enc_units
+        self.n_layers = n_layers
         self.dropout_rate = dropout_rate
         #self.outputs = {}
         self.states = {}
@@ -17,38 +18,28 @@ class Encoder(tf.keras.Model):
         else:
             self.embedding = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim= embedding_dim)
 
-        self.lstmb1 = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(self.enc_units,
+        self.lstmb = [ tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(self.enc_units,
                                                                         return_sequences=True,
                                                                         return_state=True,
                                                                         dropout = self.dropout_rate,
                                                                         go_backwards=True), merge_mode='sum')
+                      for _ in range(n_layers)]
 
-        self.lstmb2 = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(self.enc_units,
-                                                                        return_sequences=True,
-                                                                        return_state= True,
-                                                                         dropout=self.dropout_rate, go_backwards=True), merge_mode='sum')
-        
-        self.lstmb3 = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(self.enc_units,
-                                                                        return_sequences=True,
-                                                                        return_state=True,
-                                                                        dropout=self.dropout_rate, go_backwards=True), merge_mode='sum')
-    
-    def call(self, x, training=True):
+    @tf.function
+    def call(self, inputs, training=True):
+        x, hidden_states = inputs
         x = self.embedding(x)
+        self.states = hidden_states
         #print('x shape: ',x.shape)
-        x, hidden_forward, cell_forward, hidden_backward, cell_backward = self.lstmb1(x,
+        for i in range(self.n_layers):
+            x, hidden_forward, cell_forward, hidden_backward, cell_backward = self.lstmb[i](x, initial_state= self.states,
                                                                                       training=training)
-        x, hidden_forward, cell_forward, hidden_backward, cell_backward = self.lstmb2(x, initial_state= [hidden_forward, 
-                                                                                                        cell_forward, hidden_backward, cell_backward],
-                                                                                      training=training)
-        outputs, self.states["for_h"], self.states["for_c"], self.states["bac_h"], self.states["bac_c"] = self.lstmb3(x, initial_state=[hidden_forward, 
-                                                                                                        cell_forward, hidden_backward, cell_backward], 
-                                                                                                        training=training)
-        return outputs, self.states
-        #return self.outputs, self.states
+            self.states = [hidden_forward, cell_forward, hidden_backward, cell_backward]
+
+        return x, hidden_forward, cell_forward, hidden_backward, cell_backward
 
     def initialize_hidden_state(self):
-        return [tf.zeros((self.batch_sz, self.enc_units)),tf.zeros((self.enc_units, self.enc_units))]
+        return tf.zeros((self.batch_sz, self.enc_units))
 
 class BahdanauAttention(tf.keras.layers.Layer):
   def __init__(self, units):
@@ -81,13 +72,12 @@ class BahdanauAttention(tf.keras.layers.Layer):
 
     return context_vector, attention_weights
 
-
-# DEFINING THE DECODER CLASS OF MODEL
-class DecoderBahdanauAtt(tf.keras.Model):
-  def __init__(self, vocab_size, embedding_dim, dec_units, batch_sz, dropout_rate, embedding_matrix):
+class Decoder(tf.keras.Model):
+  def __init__(self, vocab_size, n_layers, embedding_dim, dec_units, batch_sz, dropout_rate, embedding_matrix):
     super(Decoder, self).__init__()
     self.batch_sz = batch_sz
     self.dec_units = dec_units
+    self.n_layers = n_layers
     self.dropout_rate = dropout_rate
     if embedding_matrix is not None:
         #self.embedding = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim= embedding_dim, weights = [embedding_matrix])
@@ -96,35 +86,76 @@ class DecoderBahdanauAtt(tf.keras.Model):
     else:
         self.embedding = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim= embedding_dim)
 
-    self.lstm1 = tf.keras.layers.LSTM(self.dec_units,
+    self.lstm = [tf.keras.layers.LSTM(self.dec_units,
                                    return_sequences=True,
                                    return_state=True,
-                                   dropout=self.dropout_rate)
-
-    self.lstm2 = tf.keras.layers.LSTM(self.dec_units,
-                                   return_sequences=True,
-                                   return_state=True,
-                                  dropout=self.dropout_rate)
-
-    self.lstm3 = tf.keras.layers.LSTM(self.dec_units,
-                                   return_sequences=True,
-                                   return_state=True,
-                                   dropout=self.dropout_rate)
+                                   dropout=self.dropout_rate) for _ in range(n_layers)]
 
     self.fc = tf.keras.layers.Dense(vocab_size)
-    self.attention = BahdanauAttention(self.dec_units)
     
-
-  #def call(self, x, enc_output, hidden, Training=True):
+  @tf.function
   def call(self, inputs, training=True):
     # x shape after passing through embedding == (batch_size, 1, embedding_dim)
-    x, enc_output, hidden = inputs
+    x, hidden = inputs
 
     x = self.embedding(x)
     #print('x shape: ',x.shape)
 
-    x, h, c = self.lstm1(x, initial_state = hidden)
-    x, h ,c = self.lstm2(x, initial_state= [h, c])
+    h,c = hidden
+    for i in range(self.n_layers):
+        x, h ,c = self.lstm[i](x, initial_state= [h, c])
+    
+    # enc_output shape == (batch_size, max_length, hidden_size)
+    #context_vector, attention_weights = self.attention(h, enc_output)
+
+    # x shape after concatenation == (batch_size, 1, embedding_dim + hidden_size)
+    #x = tf.concat([tf.expand_dims(context_vector, 1), x], axis=-1)
+
+    # applying lstm
+    #x, h, c = self.lstm3(x, initial_state= [h, c])
+    #states = [h, c]
+
+    x = tf.reshape(x, (-1, x.shape[2]))
+
+    # output shape == (batch_size, vocab)
+    x = self.fc(x)
+
+    return x, h, c
+
+
+class DecoderBahdanauAtt(tf.keras.Model):
+  def __init__(self, vocab_size, n_layers, embedding_dim, dec_units, batch_sz, dropout_rate, embedding_matrix):
+    super(DecoderBahdanauAtt, self).__init__()
+    self.batch_sz = batch_sz
+    self.dec_units = dec_units
+    self.n_layers = n_layers
+    self.dropout_rate = dropout_rate
+    if embedding_matrix is not None:
+        #self.embedding = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim= embedding_dim, weights = [embedding_matrix])
+        self.embedding = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim= embedding_dim, 
+                                                   embeddings_initializer= tf.keras.initializers.Constant(embedding_matrix))
+    else:
+        self.embedding = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim= embedding_dim)
+
+    self.lstm = [tf.keras.layers.LSTM(self.dec_units,
+                                   return_sequences=True,
+                                   return_state=True,
+                                   dropout=self.dropout_rate) for _ in range(n_layers)]
+
+    self.fc = tf.keras.layers.Dense(vocab_size)
+    self.attention = BahdanauAttention(self.dec_units)
+
+  @tf.function
+  def call(self, inputs, training=True):
+    # x shape after passing through embedding == (batch_size, 1, embedding_dim)
+    x, hidden, enc_output = inputs
+
+    x = self.embedding(x)
+    #print('x shape: ',x.shape)
+
+    h,c = hidden
+    for i in range(self.n_layers-1):
+        x, h ,c = self.lstm[i](x, initial_state= [h, c])
     
     # enc_output shape == (batch_size, max_length, hidden_size)
     context_vector, attention_weights = self.attention(h, enc_output)
@@ -133,70 +164,14 @@ class DecoderBahdanauAtt(tf.keras.Model):
     x = tf.concat([tf.expand_dims(context_vector, 1), x], axis=-1)
 
     # applying lstm
-    x, h, c = self.lstm3(x, initial_state= [h, c])
-    states = [h, c]
+    x, h, c = self.lstm[-1](x, initial_state= [h, c])
+    #states = [h, c]
 
     x = tf.reshape(x, (-1, x.shape[2]))
 
     # output shape == (batch_size, vocab)
     x = self.fc(x)
 
-    return x, states, attention_weights
+    return x, h, c, attention_weights
 
-# DEFINING THE DECODER CLASS OF MODEL
-class Decoder(tf.keras.Model):
-  def __init__(self, vocab_size, embedding_dim, dec_units, batch_sz, dropout_rate, embedding_matrix):
-    super(Decoder, self).__init__()
-    self.batch_sz = batch_sz
-    self.dec_units = dec_units
-    self.dropout_rate = dropout_rate
-    if embedding_matrix is not None:
-        #self.embedding = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim= embedding_dim, weights = [embedding_matrix])
-        self.embedding = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim= embedding_dim, 
-                                                   embeddings_initializer= tf.keras.initializers.Constant(embedding_matrix))
-    else:
-        self.embedding = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim= embedding_dim)
 
-    self.lstm1 = tf.keras.layers.LSTM(self.dec_units,
-                                   return_sequences=True,
-                                   return_state=True,
-                                   dropout=self.dropout_rate)
-
-    self.lstm2 = tf.keras.layers.LSTM(self.dec_units,
-                                   return_sequences=True,
-                                   return_state=True,
-                                  dropout=self.dropout_rate)
-
-    self.lstm3 = tf.keras.layers.LSTM(self.dec_units,
-                                   return_sequences=True,
-                                   return_state=True,
-                                   dropout=self.dropout_rate)
-
-    self.fc = tf.keras.layers.Dense(vocab_size)
-    self.attention = BahdanauAttention(self.dec_units)
-    
-
-  #def call(self, x, enc_output, hidden, Training=True):
-  def call(self, inputs, training=True):
-    # x shape: [batch_size, MAX_SUMM_LENGTH]
-    # hidden: [[batch_size, N_UNITS],batch_size, N_UNITS]
-    x, hidden = inputs
-
-    x = self.embedding(x)
-    #print('x shape: ',x.shape)
-
-    x, h, c = self.lstm1(x, initial_state = hidden)
-    x, h ,c = self.lstm2(x, initial_state= [h, c])
-    
-    # applying lstm
-    x, h, c = self.lstm3(x, initial_state= [h, c])
-    states = [h, c]
-
-    x = tf.reshape(x, (-1, x.shape[2]))
-
-    # output shape == (batch_size, vocab)
-    x = self.fc(x)
-
-    return x, states
-
-    

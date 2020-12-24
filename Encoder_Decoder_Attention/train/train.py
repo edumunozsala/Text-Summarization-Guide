@@ -77,19 +77,24 @@ def train_step(inputs):
   inp, targ = inputs
   loss = 0
 
-  with tf.GradientTape() as tape:
-    enc_output, enc_states = encoder(inp)
+  # Create the initial hidden states
+  enc_states = [encoder.initialize_hidden_state(), encoder.initialize_hidden_state(),
+                 encoder.initialize_hidden_state(), encoder.initialize_hidden_state()]
 
-    dec_hidden = [ tf.add(enc_states["for_h"], enc_states["bac_h"]), tf.add(enc_states["for_c"], 
-                                enc_states["bac_c"]) ]
+  with tf.GradientTape() as tape:
+    enc_output, enc_for_h, enc_for_c, enc_bac_h, enc_bac_c = encoder([inp, enc_states])
+
+    dec_hidden = [ tf.add(enc_for_h, enc_bac_h), tf.add(enc_for_c, 
+                                enc_bac_c) ]
     dec_input = tf.expand_dims([tokenizer_outputs.word_index['<start>']] * args.batch_size, 1)
 
     # Teacher forcing - feeding the target as the next input
     for t in range(1, targ.shape[1]):
       # passing enc_output to the decoder
-      predictions, dec_hidden = decoder((dec_input, dec_hidden))
+      predictions, dec_h, dec_c = decoder([dec_input, dec_hidden])
+      dec_hidden = [dec_h, dec_c]
+      # Calculate the los function
       loss += loss_function(targ[:, t], predictions)
-
       # using teacher forcing
       dec_input = tf.expand_dims(targ[:, t], 1)
 
@@ -106,10 +111,15 @@ def eval_step(inputs):
 
     inp, targ = inputs
     loss = 0
+    # Create the encoder initial states
+    enc_states = [encoder.initialize_hidden_state(), encoder.initialize_hidden_state(),
+                 encoder.initialize_hidden_state(), encoder.initialize_hidden_state()]
 
-    enc_output, enc_states = encoder(inp, False)
-    dec_hidden = [ tf.add(enc_states["for_h"], enc_states["bac_h"]), tf.add(enc_states["for_c"], 
-                          enc_states["bac_c"]) ]
+    enc_output, enc_for_h, enc_for_c, enc_bac_h, enc_bac_c = encoder([inp, enc_states], False)
+
+    dec_hidden = [tf.add(enc_for_h, enc_bac_h), tf.add(enc_for_c, 
+                          enc_bac_c)]
+
     dec_input = tf.expand_dims([tokenizer_outputs.word_index['<start>']] * args.batch_size, 1)
     result_ids = tf.one_hot([tokenizer_outputs.word_index['<start>']]*args.batch_size, 
                             output_vocab_size, dtype=tf.float32)
@@ -121,7 +131,9 @@ def eval_step(inputs):
       # passing enc_output to the decoder
       #decoder(dec_input, enc_output, dec_hidden)
       #predictions, dec_hidden = decoder(dec_input, enc_output, dec_hidden)
-      predictions, dec_hidden  = decoder((dec_input, dec_hidden), False)
+      predictions, dec_h, dec_c = decoder([dec_input, dec_hidden], False)
+      dec_hidden = [dec_h, dec_c]
+      # Calculate the loss function
       loss += loss_function(targ[:, t], predictions)
       # using teacher forcing
       dec_input = tf.expand_dims(targ[:, t], 1)
@@ -261,6 +273,10 @@ if __name__ == '__main__':
                         help='input max sequence length for training (default: 60)')
     parser.add_argument('--summ-max-len', type=int, default=15, metavar='N',
                         help='target max sequence length for training (default: 60)')
+    parser.add_argument('--enc_layers', type=int, default=2, metavar='N',
+                        help='Num layers in the encoder (default: 2)')
+    parser.add_argument('--dec_layers', type=int, default=2, metavar='N',
+                        help='Num layers in the decoder (default: 2)')
     parser.add_argument('--epochs', type=int, default=2, metavar='N',
                         help='number of epochs to train (default: 2)')
     parser.add_argument('--nsamples', type=int, default=10000, metavar='N',
@@ -323,6 +339,9 @@ if __name__ == '__main__':
         config.RNN_UNITS = args.lstm_units
         config.EMBEDDING_DIM = args.embedding_dim
         config.LEARNING_RATE = args.learning_rate
+        config.ENC_LAYERS = args.enc_layers
+        config.DEC_LAYERS = args.dec_layers
+
 
     # Load the training data.
     print("Get the train data")
@@ -348,8 +367,8 @@ if __name__ == '__main__':
     # Clean the session
     tf.keras.backend.clear_session()
     # Create the Transformer model
-    encoder = Encoder(input_vocab_size, args.embedding_dim, args.lstm_units, args.batch_size, args.dropout_rate, None)
-    decoder = Decoder(output_vocab_size, args.embedding_dim, args.lstm_units, args.batch_size, args.dropout_rate, None)
+    encoder = Encoder(input_vocab_size, args.enc_layers, args.embedding_dim, args.lstm_units, args.batch_size, args.dropout_rate, None)
+    decoder = Decoder(output_vocab_size, args.dec_layers, args.embedding_dim, args.lstm_units, args.batch_size, args.dropout_rate, None)
 
     # Define a categorical cross entropy loss
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True,
@@ -393,12 +412,36 @@ if __name__ == '__main__':
 
     # Save the encoder
     encoder_model_path = os.path.join(args.sm_model_dir, 'encoder')
-    tf.saved_model.save(encoder, encoder_model_path)
+    #tf.saved_model.save(encoder, encoder_model_path)
+    try:
+        tf.saved_model.save(encoder, 'encoder', signatures=encoder.call.get_concrete_function(
+            [tf.TensorSpec(shape=[None, args.text_max_len], dtype=tf.int32, name='x'), 
+             [tf.TensorSpec(shape=[None, args.lstm_units], dtype=tf.float32, name='for_h'), 
+              tf.TensorSpec(shape=[None, args.lstm_units], dtype=tf.float32, name='for_c'),
+              tf.TensorSpec(shape=[None, args.lstm_units], dtype=tf.float32, name='bac_h'), 
+              tf.TensorSpec(shape=[None, args.lstm_units], dtype=tf.float32, name='bac_c')
+             ]
+            ]))
+        print('Saving the encoder in SavedModel format....')
+    except:
+        encoder.save_weights(encoder_model_path, save_format='h5')
+        print('Saving the encoder in HDF5 format....')
+
     # Save the entire model to a HDF5 file
     decoder_model_path = os.path.join(args.sm_model_dir, 'decoder')
-    tf.saved_model.save(decoder, decoder_model_path)
-    print('Saving the model ....')
-    #decoder.save_weights(os.path.join(args.sm_model_dir, 'decoder'), overwrite=True, save_format='tf')
+    #tf.saved_model.save(decoder, decoder_model_path)
+    try:
+        tf.saved_model.save(decoder, 'decoder', signatures=decoder.call.get_concrete_function(
+            [tf.TensorSpec(shape=[None, args.summ_max_len], dtype=tf.int32, name='x'), 
+                [tf.TensorSpec(shape=[None, args.lstm_units], dtype=tf.float32, name='initial_h'), 
+                tf.TensorSpec(shape=[None, args.lstm_units], dtype=tf.float32, name='initial_c')
+                ]
+            ]))
+        print('Saving the decoder in SavedModel format....')
+    except:
+        decoder.save_weights(decoder_model_path, save_format='h5')
+        print('Saving the decoder in HDF5 format....')
+
 
     # Save the parameters used to construct the model
     print("Saving the model parameters")
@@ -409,7 +452,9 @@ if __name__ == '__main__':
             'vocab_size_dec': output_vocab_size,
             'embedding_dim': args.embedding_dim,
             'lstm_units': args.lstm_units,
-            'batch_size': args.batch_size
+            'batch_size': args.batch_size,
+            'enc_layers': args.enc_layers,
+            'dec_layers': args.dec_layers
         }
         pickle.dump(model_info, f)
           

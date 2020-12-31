@@ -150,6 +150,7 @@ $RECYCLE.BIN/
 # End of https://www.gitignore.io/api/python,windows,jupyternotebooks
 # Wandb authenticating file
 Encoder_Decoder_Attention\train\secrets.env
+Transformer\train\secrets.env
 
 # Data folder
 data

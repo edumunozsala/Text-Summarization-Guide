@@ -319,13 +319,14 @@ if __name__ == '__main__':
     print(args.sm_model_dir, args.model_dir)
     # Create and config the W&B project
     # Set the project name and run name for wandB
-    project_name="Text-summa-EncDec-Attention"
-    demo_name="Demo_run"
+    project_name="Text-summarization"
+    demo_name="Enc-Dec-Tuner"
+    group_name = "Enc-Dec"
 
     if args.resume:
         # Set the project name, the run name, the description
-        wandb.init(project=project_name, name=demo_name, 
-                    notes="Training en encoder-decoder with attention for Text Summarization")
+        wandb.init(project=project_name, name=demo_name, group=group_name,
+                    notes="Training en encoder-decoder for Text Summarization")
         # WandB – Config is a variable that holds and saves hyperparameters and inputs
         # Defining some key variables that will be used later on in the training  
         config = wandb.config          # Initialize config

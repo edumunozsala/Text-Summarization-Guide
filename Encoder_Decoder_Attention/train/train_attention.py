@@ -319,12 +319,13 @@ if __name__ == '__main__':
     print(args.sm_model_dir, args.model_dir)
     # Create and config the W&B project
     # Set the project name and run name for wandB
-    project_name="Text-summa-EncDec-Attention"
-    demo_name="Demo_run"
+    project_name="Text-summarization"
+    demo_name="Enc-Dec-Att-Tuner2"
+    group_name = "Enc-Dec-Att"
 
     if args.resume:
         # Set the project name, the run name, the description
-        wandb.init(project=project_name, name=demo_name, 
+        wandb.init(project=project_name, name=demo_name, group=group_name,
                     notes="Training en encoder-decoder with attention for Text Summarization")
         # WandB – Config is a variable that holds and saves hyperparameters and inputs
         # Defining some key variables that will be used later on in the training  
@@ -405,7 +406,7 @@ if __name__ == '__main__':
     print('Training the model ....')
     # Train the model
     train_losses, val_losses, val_metric = main_train(dataset, val_dataset, args.epochs, steps_per_epoch, 
-                                                  val_steps_per_epoch, save_checkpoints=False, logging= False)
+                                                  val_steps_per_epoch, save_checkpoints=False, logging= True)
     if args.resume:
         # Finish the wandb job
         wandb.finish()

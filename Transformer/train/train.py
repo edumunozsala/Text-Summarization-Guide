@@ -12,6 +12,9 @@ import pickle
 from sklearn.model_selection import train_test_split
 import tensorflow as tf
 
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
 # To install tensorflow_datasets
 import subprocess
 
@@ -20,7 +23,7 @@ def install(package):
 
 # Install the library tensorflow_datasets
 
-from utils import subword_tokenize, preprocess_text_nonbreaking
+from utils import subword_tokenize, preprocess_text_nonbreaking, tensor_to_text
 #from utils_train import loss_function, CustomSchedule
 
 from model import Transformer
@@ -31,6 +34,7 @@ import datasets
 
 INPUT_COLUMN = 'text'
 TARGET_COLUMN = 'summary'
+OOV_TOKEN='<unk>'
 
 def get_train_data(training_dir, nonbreaking_in, nonbreaking_out, train_file, nsamples):
     # Load the nonbreaking files
@@ -54,6 +58,9 @@ def get_train_data(training_dir, nonbreaking_in, nonbreaking_out, train_file, ns
     input_data=df[INPUT_COLUMN].apply(lambda x : preprocess_text_nonbreaking(x, non_breaking_prefix_en)).tolist()
     # Preprocess and include the end of sentence token to the target text
     target_data=df[TARGET_COLUMN].apply(lambda x : preprocess_text_nonbreaking(x, non_breaking_prefix_es)).tolist()
+
+    input_data = ['<start> '+inp+' <end>' for inp in input_data]
+    target_data = ['<start> '+targ+' <end>' for targ in target_data]
 
     return input_data, target_data
 
@@ -88,6 +95,45 @@ def eval_step(enc_inputs, dec_inputs, dec_outputs_real):
 
     return loss, predictions
 
+def eval_metrics_step(enc_inputs, dec_inputs, dec_outputs_real):
+    # Tokenize the input sequence using the tokenizer_in
+    # Set the initial output sentence to sos
+    out_sentence = [sos_token_output]*dec_inputs.shape[0]
+    out_ids = tf.one_hot([sos_token_output]*dec_inputs.shape[0], 
+                            num_words_output, dtype=tf.float32)
+    # Reshape the output
+    output = tf.expand_dims(out_sentence, axis=1)
+    output_ids = tf.expand_dims(out_ids,axis=1)
+    #total_loss = 0
+    # For max target len tokens
+    for _ in range(args.summ_max_len - 1):
+        # Call the transformer and get the logits 
+        predictions = transformer(enc_inputs, output, False) #(1, seq_length, VOCAB_SIZE_ES)
+        #Calculate the loss in the batch
+        #loss = loss_function(dec_outputs_real, predictions)
+        #total_loss += loss
+        # Extract the logists of the next word
+        prediction = predictions[:, -1:, :]
+        # The highest probability is taken
+        predicted_id = tf.cast(tf.argmax(prediction, axis=-1), tf.int32)
+        # Check if it is the eos token
+        #if predicted_id == eos_token_output:
+        #    return tf.squeeze(output, axis=0)
+        # Concat the predicted word to the output sequence
+        output = tf.concat([output, predicted_id], axis=-1)
+        output_ids = tf.concat([output_ids, prediction], axis=1)
+
+    # Calculate the loss
+    # output_ids = output_ids[:, 1:, :]
+    # Do not consider start token in predictions
+    loss = loss_function(dec_outputs_real, output_ids[:, 1:, :])
+    # Save and store the metrics
+    val_accuracy.update_state(dec_outputs_real, predictions)
+
+    # Call the transformer and get the predicted output
+    predictions = output #tf.squeeze(output, axis=0)
+
+    return loss, predictions
 
 def main_train(dataset, val_dataset, transformer, n_epochs, print_every=50):
   ''' Train the transformer model for n_epochs using the data generator dataset'''
@@ -123,33 +169,31 @@ def main_train(dataset, val_dataset, transformer, n_epochs, print_every=50):
                                                    batch,
                                                    train_loss.result()))
 
-            #print("Epoch {} Batch {} Loss {:.4f} T.Accuracy {:.4f}".format(
-            #    epoch+1, batch, train_loss.result(), train_accuracy.result()))
-            
     # Reset the validation losss and accuracy calculations
     val_loss.reset_states()
     val_accuracy.reset_states()
     # Evaluation loop
+    total_loss=0
+    i=0
     for (batch, (enc_inputs, targets)) in enumerate(val_dataset):
+        i+=1
         # Set the decoder inputs
         dec_inputs = targets[:, :-1]
         # Set the target outputs, right shifted
         dec_outputs_real = targets[:, 1:]
         # Apply a step train
-        loss, preds = eval_step(enc_inputs, dec_inputs, dec_outputs_real)
+        loss, preds = eval_metrics_step(enc_inputs, dec_inputs, dec_outputs_real)
+        total_loss += loss
         # The highest probability is taken
-        predicted_ids = tf.cast(tf.argmax(preds, axis=-1), tf.int32)
-        #print('Pred Ids: ', predicted_ids.shape)
-        # Transform the sequence of tokens to a sentence
-        predicted_sentences = [tokenizer_outputs.decode(
-                              [i for i in predicted_sent if i < sos_token_output]) 
-                                    for predicted_sent in predicted_ids]
+        predicted_sentences = tensor_to_text(tokenizer_outputs, preds.numpy(),eos_token_output)                
         # TRansform 
-        references = [tokenizer_outputs.decode(
-                                        [i for i in predicted_sent if i < sos_token_output]) 
-                                        for predicted_sent in targets]
+        references = tensor_to_text(tokenizer_outputs, targets.numpy(),eos_token_output)
         metric.add_batch(predictions=predicted_sentences, references=references)
-
+    #print('i: ',i)
+    #print('batch: ',batch)
+    total_loss = total_loss/i
+    val_loss.update_state(total_loss)
+    
     val_losses.append(val_loss.result())
     val_acc.append(val_accuracy.result())
     # Calculate the rouge score for the epoch
@@ -157,7 +201,6 @@ def main_train(dataset, val_dataset, transformer, n_epochs, print_every=50):
     metric_score = parse_score(metric_results)
 
     # Register in wandb
-    #wandb.log({"Validation Loss": val_loss.result(), "Validation Acc": val_accuracy.result()})
     wandb.log({"Validation Loss": val_loss.result(), #})
                    "Rouge1": metric_score['rouge1'],
                    "Rouge2": metric_score['rouge2'],
@@ -168,9 +211,6 @@ def main_train(dataset, val_dataset, transformer, n_epochs, print_every=50):
                 epoch+1, batch, val_loss.result(),metric_score['rouge1'], metric_score['rouge2'],
                 metric_score['rougeL']))
 
-    #print("Epoch {} Batch {} Val Loss {:.4f} Val Accuracy {:.4f}".format(
-    #            epoch+1, batch, val_loss.result(), val_accuracy.result()))
-
     # Checkpoint the model on every epoch        
     ckpt_save_path = ckpt_manager.save()
     print("Saving checkpoint for epoch {} in {}".format(epoch+1,
@@ -178,7 +218,6 @@ def main_train(dataset, val_dataset, transformer, n_epochs, print_every=50):
     print("Time for 1 epoch: {} secs\n".format(time.time() - start))
 
   return train_losses, train_acc, val_losses, val_acc
-
 
 def loss_function(target, pred):
     mask = tf.math.logical_not(tf.math.equal(target, 0))
@@ -294,13 +333,34 @@ if __name__ == '__main__':
     print("Get the train data")
     input_data, target_data = get_train_data(args.data_dir, args.non_breaking_in, args.non_breaking_out, args.train_file, args.nsamples)
 
-    # Tokenize and pad the input sequences
-    print("Tokenize the input and output data and create the vocabularies") 
-    encoder_inputs, tokenizer_inputs, num_words_inputs, sos_token_input, eos_token_input, del_idx_inputs= subword_tokenize(input_data, 
-                                                                                                        args.vocab_size, args.text_max_len)
-    # Tokenize and pad the outputs sequences
-    decoder_outputs, tokenizer_outputs, num_words_output, sos_token_output, eos_token_output, del_idx_outputs = subword_tokenize(target_data, 
-                                                                                                          args.vocab_size, args.summ_max_len)
+    tokenizer = Tokenizer(num_words=args.vocab_size, filters='', oov_token=OOV_TOKEN)
+    tokenizer.fit_on_texts(input_data)
+    tokenizer.fit_on_texts(target_data)
+    # Tokenize and transform input texts to sequence of integers
+    input_sequences = tokenizer.texts_to_sequences(input_data)
+    output_sequences = tokenizer.texts_to_sequences(target_data)
+    # Claculate the max length
+    input_max_length = max(len(s) for s in input_sequences)
+    output_max_length = max(len(s) for s in output_sequences)
+    # Apply padding and truncate if required
+    encoder_inputs = pad_sequences(input_sequences, maxlen=args.text_max_len, 
+                                            truncating='post', padding='post')
+    decoder_outputs = pad_sequences(output_sequences, maxlen=args.summ_max_len, 
+                                            truncating='post', padding='post')
+    tokenizer_inputs = tokenizer
+    tokenizer_outputs = tokenizer
+
+    #Set the start and end token for input and output vocabulary
+    sos_token_input = tokenizer_inputs.word_index['<start>']
+    eos_token_input = tokenizer_inputs.word_index['<end>']
+    sos_token_output = tokenizer_outputs.word_index['<start>']
+    eos_token_output = tokenizer_outputs.word_index['<end>']
+    print('Token for sos and eos:', sos_token_input, eos_token_input, sos_token_output, eos_token_output)
+    num_words_inputs = tokenizer_inputs.num_words
+    num_words_output = tokenizer_outputs.num_words
+    print('Size of Input Vocabulary: ', num_words_inputs)
+    print('Size of Output Vocabulary: ', num_words_output)
+
     print('Input vocab: ',num_words_inputs)
     print('Output vocab: ',num_words_output)
 

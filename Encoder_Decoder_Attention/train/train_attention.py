@@ -21,11 +21,6 @@ import subprocess
 def install(package):
     subprocess.check_call([sys.executable, "-q", "-m", "pip", "install", package])
 
-# Install the library tensorflow_datasets
-#install('datasets')
-#install('rouge_score')
-#install('wandb')
-
 import datasets
 import wandb
 

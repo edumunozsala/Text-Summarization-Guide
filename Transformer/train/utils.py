@@ -83,3 +83,36 @@ def subword_tokenize(corpus, vocab_size, max_length):
   
   return sentences, tokenizer_corpus, num_words, sos_token, eos_token, idx_to_remove
 
+def word_tokenize(input_data, max_vocab_size, max_length=None, OOV_token= None, 
+                  filters='', padding= True):
+    tokenizer = Tokenizer(num_words=max_vocab_size, filters=filters, oov_token=OOV_token)
+    tokenizer.fit_on_texts(input_data)
+    # Tokenize and transform input texts to sequence of integers
+    input_sequences = tokenizer.texts_to_sequences(input_data)
+    # Claculate the max length
+    input_max_len = max(len(s) for s in input_sequences)
+    # Apply padding and truncate if required
+    if padding:
+        if max_length != None:
+            input_sequences = pad_sequences(input_sequences, maxlen=max_length, 
+                                            truncating='post', padding='post')
+        else:
+            input_sequences = pad_sequences(input_sequences, padding='post')
+
+    return input_sequences, tokenizer, input_max_len
+
+def tensor_to_text(tokenizer, tensors, eos_token_output):
+  texts=[]
+  for tensor in tensors:
+      text=[]
+      for t in tensor:
+          if t!=0:
+            text +=[tokenizer.index_word[t]]
+          if t==eos_token_output:
+            break
+
+      #text=[tokenizer.index_word[t] for t in tensor if t!=0 and t!=]
+      texts.append(' '.join(text))
+
+  return texts
+

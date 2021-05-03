@@ -42,7 +42,30 @@ For that reason, we will use a dataset from Kaggle, called Inshorts News Data. I
 
 The Jupyter notebook, **Text_summarization_EDA** describes an EDA on the dataset where we can observe the word and sentence distributions and some other interesting insights. 
 
-It also contains a notebook where we apply some cleaning techniques on text data (dealing with punctuation, stop words,...) and split the data in a train and validation dataset.*Still in progress*
+In the Jupyter notebook, **TextSumm_Data_Preprocessing** we apply some cleaning techniques on text data (dealing with punctuation, stop words,...) and split the data in a train and validation dataset.
+
+## Encoder Decoder model
+Our first model, it's a sequence-to-sequence model (no attention mechanism) containing an embedding layer and a RNN, LSTM, layer. It is a simple approach to our solution but a good starting point. We are interested in showing how to use AWS SageMaker to train the model and track the performance in Weight & Biases platform.
+
+We have built:
+- "TextSumm_Enc_Dec_custom_container": using a custom container in a SageMaker training job.
+- "TextSumm-Enc-Dec-SageMaker-hp-tunning": hyperparameter tuning job in SageMaker.
+
+## Encoder Decoder model with Attention
+The next model, it's a sequence-to-sequence model with Bahdanau attention. It is also a simple approach to the attention mechanism. We are interested in showing how to use AWS SageMaker to train the model and track the performance in Weight & Biases platform.
+
+We have built:
+- "TextSumm-Enc-Dec-Attention-SageMaker": Training the model in a built-in SageMaker container in script mode.
+- "TextSumm_Enc_Dec_Att_custom_container": using a custom container in a SageMaker training job.
+- "TextSumm-Enc-Dec-Attention-SageMaker-hp-tunning": hyperparameter tuning job in SageMaker.
+
+## Transformer model
+Now we implement a Transformer model.
+
+We have built:
+- "TextSumm_Transformer_custom_container": using a custom container in a SageMaker training job.
+- "TextSumm-Transformer-hp-tunning": hyperparameter tuning job in SageMaker.
+- "TextSumm_Transformer_inference": **In progress** create an inference container for a transformer model.
 
 ## NEW features in progress
 
